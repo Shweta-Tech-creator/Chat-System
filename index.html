@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discord Sharding Simulation | Dev Log</title>
+  <meta name="description" content="An interactive visualization of a 10-day sprint building a sharded chat system — from single server to distributed reality." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-0: #0b0d14;
+      --bg-1: #111420;
+      --bg-2: #161928;
+      --bg-3: #1e2235;
+      --bg-4: #252a3d;
+      --accent: #5865f2;
+      --accent-light: #7289ff;
+      --accent-glow: rgba(88,101,242,0.35);
+      --green: #3ba55d;
+      --red: #ed4245;
+      --yellow: #faa81a;
+      --cyan: #00d2ff;
+      --purple: #b14fcf;
+      --text-1: #e3e5e8;
+      --text-2: #96a0b5;
+      --text-3: #5a6380;
+      --border: rgba(88,101,242,0.18);
+      --glass: rgba(22,25,40,0.7);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-0);
+      color: var(--text-1);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ---- BACKGROUND ---- */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(88,101,242,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(88,101,242,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .bg-orb {
+      position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0;
+    }
+    .bg-orb-1 { width: 600px; height: 600px; background: rgba(88,101,242,0.12); top: -200px; left: -200px; }
+    .bg-orb-2 { width: 400px; height: 400px; background: rgba(177,79,207,0.08); bottom: -100px; right: -100px; }
+
+    /* ---- LAYOUT ---- */
+    .app { display: flex; height: 100vh; position: relative; z-index: 1; }
+
+    /* ---- SIDEBAR ---- */
+    .sidebar {
+      width: 280px; flex-shrink: 0;
+      background: var(--bg-1);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow-y: auto;
+    }
+    .sidebar-header {
+      padding: 24px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 18px; font-weight: 800; color: var(--text-1);
+    }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .sidebar-subtitle {
+      font-size: 11px; color: var(--text-3); margin-top: 4px; letter-spacing: 0.5px;
+    }
+
+    .sidebar-section { padding: 16px 12px 8px; }
+    .sidebar-label {
+      font-size: 10px; font-weight: 700; color: var(--text-3);
+      letter-spacing: 1.2px; text-transform: uppercase;
+      padding: 0 8px; margin-bottom: 6px;
+    }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: var(--radius-sm);
+      cursor: pointer; transition: all 0.2s;
+      font-size: 13.5px; font-weight: 500; color: var(--text-2);
+    }
+    .nav-item:hover { background: var(--bg-3); color: var(--text-1); }
+    .nav-item.active { background: var(--accent); color: #fff; box-shadow: 0 4px 16px var(--accent-glow); }
+    .nav-day-badge {
+      font-size: 10px; font-weight: 700; background: var(--bg-4);
+      color: var(--text-3); padding: 2px 6px; border-radius: 4px;
+      margin-left: auto; font-family: 'JetBrains Mono', monospace;
+    }
+    .nav-item.active .nav-day-badge { background: rgba(255,255,255,0.2); color: #fff; }
+    .nav-status {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .status-done { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .status-active { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); animation: pulse 2s infinite; }
+    .status-sim { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .sidebar-footer {
+      margin-top: auto; padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-3);
+    }
+
+    /* ---- MAIN ---- */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .topbar {
+      padding: 16px 28px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 16px;
+    }
+    .topbar-title { font-size: 16px; font-weight: 700; }
+    .topbar-desc { font-size: 12px; color: var(--text-2); }
+    .topbar-pills { margin-left: auto; display: flex; gap: 8px; }
+    .pill {
+      padding: 5px 12px; border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--bg-3); color: var(--text-2);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .pill:hover { border-color: var(--accent); color: var(--accent); }
+    .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 0 16px var(--accent-glow); }
+
+    .content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+
+    /* ---- CARDS ---- */
+    .card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 13px; font-weight: 700; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .card-title span { font-size: 15px; }
+
+    /* ---- GRID ---- */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .gap-16 { gap: 16px; }
+
+    /* ---- OVERVIEW TAB ---- */
+    .hero {
+      background: linear-gradient(135deg, var(--bg-2), var(--bg-3));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 20px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute;
+      top: -60px; right: -60px;
+      width: 250px; height: 250px;
+      background: radial-gradient(circle, var(--accent-glow), transparent 70%);
+      border-radius: 50%;
+    }
+    .hero h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    .hero h1 span { background: linear-gradient(135deg, var(--accent-light), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { color: var(--text-2); font-size: 14px; max-width: 560px; line-height: 1.6; }
+
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .stat-card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+    .stat-val { font-size: 28px; font-weight: 800; margin-bottom: 2px; }
+    .stat-label { font-size: 11px; color: var(--text-3); font-weight: 500; letter-spacing: 0.5px; }
+
+    /* ---- TIMELINE ---- */
+    .timeline { display: flex; flex-direction: column; gap: 0; }
+    .tl-item {
+      display: flex; gap: 16px; position: relative;
+      padding-bottom: 20px; cursor: pointer;
+    }
+    .tl-item:last-child { padding-bottom: 0; }
+    .tl-left { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 32px; }
+    .tl-dot {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 2px solid var(--border); background: var(--bg-3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; transition: all 0.3s;
+      flex-shrink: 0; z-index: 1;
+    }
+    .tl-item:hover .tl-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 20px var(--accent-glow); }
+    .tl-line { flex: 1; width: 2px; background: var(--border); margin: 4px 0; min-height: 20px; }
+    .tl-item:last-child .tl-line { display: none; }
+    .tl-body { flex: 1; padding-top: 4px; }
+    .tl-day { font-size: 10px; font-weight: 700; color: var(--accent-light); letter-spacing: 1px; margin-bottom: 2px; }
+    .tl-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .tl-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+    .tl-tag {
+      display: inline-block; margin-top: 6px;
+      font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tag-py { background: rgba(0,210,255,0.12); color: var(--cyan); }
+    .tag-md { background: rgba(88,101,242,0.15); color: var(--accent-light); }
+
+    /* ---- SIMULATOR ---- */
+    .sim-controls {
+      display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;
+    }
+    .btn {
+      padding: 9px 18px; border-radius: var(--radius-sm);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border: none; transition: all 0.2s; font-family: 'Inter', sans-serif;
+    }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 0 20px var(--accent-glow); }
+    .btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); }
+    .btn-danger { background: var(--red); color: #fff; box-shadow: 0 0 16px rgba(237,66,69,0.3); }
+    .btn-danger:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-ghost { background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    select {
+      background: var(--bg-3); color: var(--text-1);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 9px 14px; font-size: 13px; font-family: 'Inter', sans-serif;
+      cursor: pointer; outline: none;
+    }
+    select:focus { border-color: var(--accent); }
+
+    /* ---- SHARDS ---- */
+    .shards-wrap { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .shard-card {
+      flex: 1; min-width: 140px;
+      background: var(--bg-3); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px;
+      transition: all 0.3s; position: relative; overflow: hidden;
+    }
+    .shard-card.hot { border-color: var(--red); box-shadow: 0 0 24px rgba(237,66,69,0.25); }
+    .shard-card.down {
+      border-color: var(--text-3); opacity: 0.55;
+      box-shadow: none;
+    }
+    .shard-card.active-flash { border-color: var(--accent); box-shadow: 0 0 24px var(--accent-glow); }
+    .shard-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .shard-name { font-size: 13px; font-weight: 700; }
+    .shard-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+    }
+    .badge-online { background: rgba(59,165,93,0.2); color: var(--green); }
+    .badge-hot { background: rgba(237,66,69,0.2); color: var(--red); }
+    .badge-down { background: rgba(90,99,128,0.2); color: var(--text-3); }
+    .shard-count { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+    .shard-label { font-size: 10px; color: var(--text-3); margin-bottom: 12px; }
+    .shard-bar-wrap { background: var(--bg-0); border-radius: 4px; height: 6px; overflow: hidden; }
+    .shard-bar {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+    }
+    .shard-card.hot .shard-bar { background: linear-gradient(90deg, var(--yellow), var(--red)); }
+    .shard-card.down .shard-bar { background: var(--text-3); }
+    .shard-pct { font-size: 11px; color: var(--text-2); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+
+    /* ---- FEED ---- */
+    .feed {
+      background: var(--bg-1); border: 1px solid var(--border);
+      border-radius: var(--radius); max-height: 240px; overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    }
+    .feed-line {
+      padding: 7px 14px; border-bottom: 1px solid rgba(88,101,242,0.07);
+      display: flex; gap: 10px; align-items: flex-start;
+      animation: fadeIn 0.3s both;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+    .feed-line:last-child { border-bottom: none; }
+    .feed-ts { color: var(--text-3); flex-shrink: 0; }
+    .feed-msg { color: var(--text-2); }
+    .feed-msg .hi { color: var(--accent-light); }
+    .feed-msg .err { color: var(--red); }
+    .feed-msg .ok { color: var(--green); }
+    .feed-msg .warn { color: var(--yellow); }
+    .feed-msg .info { color: var(--cyan); }
+
+    /* ---- CHART ---- */
+    .chart-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .chart-card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px;
+    }
+    .chart-title { font-size: 12px; font-weight: 600; color: var(--text-3); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.8px; }
+    canvas { border-radius: 8px; }
+
+    /* ---- FAILURE ---- */
+    .failure-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .chaos-item {
+      background: var(--bg-3); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 14px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .chaos-label { font-size: 13px; font-weight: 500; }
+    .chaos-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+    .toggle {
+      position: relative; width: 42px; height: 22px; cursor: pointer;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-slider {
+      position: absolute; inset: 0; border-radius: 11px;
+      background: var(--bg-0); border: 1px solid var(--border); transition: 0.3s;
+    }
+    .toggle-slider::after {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--text-3); top: 2px; left: 2px; transition: 0.3s;
+    }
+    input:checked + .toggle-slider { background: rgba(59,165,93,0.3); border-color: var(--green); }
+    input:checked + .toggle-slider::after { background: var(--green); transform: translateX(20px); box-shadow: 0 0 8px var(--green); }
+
+    /* ---- INSIGHTS ---- */
+    .insight-list { display: flex; flex-direction: column; gap: 10px; }
+    .insight {
+      background: var(--bg-3); border-radius: var(--radius-sm);
+      border-left: 3px solid var(--accent);
+      padding: 12px 16px; font-size: 13px; line-height: 1.6;
+    }
+    .insight.warn { border-color: var(--yellow); }
+    .insight.danger { border-color: var(--red); }
+    .insight.success { border-color: var(--green); }
+    .insight-title { font-weight: 700; margin-bottom: 2px; font-size: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ---- TABS ---- */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ---- SCROLLBAR ---- */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+    /* ---- HIGHLIGHT ---- */
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-4); color: var(--cyan);
+      padding: 2px 6px; border-radius: 4px; font-size: 12px;
+    }
+
+    .speed-label { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+    input[type=range] { accent-color: var(--accent); cursor: pointer; }
+
+    .msg-count-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px; font-weight: 800; color: var(--accent-light);
+    }
+    .metric-box {
+      background: var(--bg-3); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 14px 18px;
+      text-align: center;
+    }
+    .metric-val { font-size: 22px; font-weight: 800; }
+    .metric-lbl { font-size: 10px; color: var(--text-3); font-weight: 500; letter-spacing: 0.5px; margin-top: 2px; }
+
+    @media (max-width: 900px) {
+      .sidebar { width: 220px; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .chart-wrap { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-orb bg-orb-1"></div>
+<div class="bg-orb bg-orb-2"></div>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">⚡</div>
+        <span>ShardSim</span>
+      </div>
+      <div class="sidebar-subtitle">Discord Sharding · Dev Log</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Navigation</div>
+      <div class="nav-item active" onclick="switchTab('overview', this)" id="nav-overview">
+        <div class="nav-status status-active"></div>
+        Overview
+      </div>
+      <div class="nav-item" onclick="switchTab('simulator', this)" id="nav-simulator">
+        <div class="nav-status status-sim"></div>
+        Live Simulator
+      </div>
+      <div class="nav-item" onclick="switchTab('analysis', this)" id="nav-analysis">
+        <div class="nav-status status-done"></div>
+        Analysis
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Dev Log</div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(1)">
+        <span>📝</span> System Thinking
+        <div class="nav-day-badge">D1-2</div>
+      </div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(3)">
+        <span>🏗️</span> Basic System
+        <div class="nav-day-badge">D3</div>
+      </div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(4)">
+        <span>📈</span> Scaling Awareness
+        <div class="nav-day-badge">D4</div>
+      </div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(5)">
+        <span>🔀</span> Intro Shards
+        <div class="nav-day-badge">D5</div>
+      </div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(6)">
+        <span>👤</span> User Sharding
+        <div class="nav-day-badge">D6</div>
+      </div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(7)">
+        <span>#️⃣</span> Channel Sharding
+        <div class="nav-day-badge">D7</div>
+      </div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(8)">
+        <span>#️</span> Hash Sharding
+        <div class="nav-day-badge">D8</div>
+      </div>
+      <div class="nav-item" onclick="switchTab('overview', this);scrollToDay(9)">
+        <span>💥</span> Stress + Failure
+        <div class="nav-day-badge">D9</div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      🎯 Deadline: 11 April 2026<br/>
+      <span style="color:var(--green)">●</span> Days 1–9 Complete
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div>
+        <div class="topbar-title" id="topbar-title">Project Overview</div>
+        <div class="topbar-desc" id="topbar-desc">10-day sprint — From single box to distributed reality</div>
+      </div>
+      <div class="topbar-pills">
+        <div class="pill active" id="pill-user" onclick="setShardMode('user', this)">User Shard</div>
+        <div class="pill" id="pill-channel" onclick="setShardMode('channel', this)">Channel Shard</div>
+        <div class="pill" id="pill-hash" onclick="setShardMode('hash', this)">Hash Shard</div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+
+      <!-- ===== OVERVIEW TAB ===== -->
+      <div class="tab-pane active" id="pane-overview">
+
+        <div class="hero">
+          <h1>When Chat Systems <span>Break</span></h1>
+          <p>A 10-day deep dive into distributed chat architecture — stress-testing every sharding strategy until something catches fire, then figuring out why.</p>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-val" style="color:var(--accent-light)">9</div>
+            <div class="stat-label">DAYS COMPLETE</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" style="color:var(--green)">4</div>
+            <div class="stat-label">SHARD STRATEGIES</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" style="color:var(--yellow)">3</div>
+            <div class="stat-label">HOTSPOTS FOUND</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" style="color:var(--red)">1</div>
+            <div class="stat-label">CHAOS SIMULATED</div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:20px">
+          <div class="card">
+            <div class="card-title"><span>📅</span> Project Timeline</div>
+            <div class="timeline" id="timeline-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span>💡</span> Key Insights</div>
+            <div class="insight-list">
+              <div class="insight success">
+                <div class="insight-title">✅ Hash-Based Sharding Wins</div>
+                Hashing the <code>message_id</code> achieves near-perfect distribution even under viral load. No hotspots.
+              </div>
+              <div class="insight warn">
+                <div class="insight-title">⚠️ The Channel Trap</div>
+                Channel-based sharding feels intuitive but fails catastrophically the moment a channel goes viral. One box, 100% load.
+              </div>
+              <div class="insight danger">
+                <div class="insight-title">🔴 Shard Failure = Partial Data</div>
+                When 1 of 3 shards dies, reads return incomplete history — like a book with every 3rd page ripped out.
+              </div>
+              <div class="insight">
+                <div class="insight-title">🔵 Consistent Hashing = Next Step</div>
+                Simple <code>hash % N</code> breaks when you add shards. Consistent Hashing solves re-routing without full migration.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>📊</span> Strategy Comparison</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:4px">
+            <div class="metric-box" style="border-color:rgba(88,101,242,0.3)">
+              <div class="metric-val" style="color:var(--text-2)">Single</div>
+              <div style="font-size:12px;color:var(--text-3);margin:6px 0">Server</div>
+              <div style="font-size:11px;color:var(--red)">Bottleneck: All traffic</div>
+            </div>
+            <div class="metric-box" style="border-color:rgba(88,101,242,0.3)">
+              <div class="metric-val" style="color:var(--yellow)">User</div>
+              <div style="font-size:12px;color:var(--text-3);margin:6px 0">Sharding</div>
+              <div style="font-size:11px;color:var(--yellow)">Hotspot: Influencers</div>
+            </div>
+            <div class="metric-box" style="border-color:rgba(88,101,242,0.3)">
+              <div class="metric-val" style="color:var(--yellow)">Channel</div>
+              <div style="font-size:12px;color:var(--text-3);margin:6px 0">Sharding</div>
+              <div style="font-size:11px;color:var(--yellow)">Hotspot: Viral channels</div>
+            </div>
+            <div class="metric-box" style="border-color:rgba(59,165,93,0.3)">
+              <div class="metric-val" style="color:var(--green)">Hash</div>
+              <div style="font-size:12px;color:var(--text-3);margin:6px 0">Sharding</div>
+              <div style="font-size:11px;color:var(--green)">Even distribution ✓</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ===== SIMULATOR TAB ===== -->
+      <div class="tab-pane" id="pane-simulator">
+
+        <div class="sim-controls">
+          <button class="btn btn-primary" id="btn-start" onclick="startSim()">▶ Start Simulation</button>
+          <button class="btn btn-ghost" id="btn-reset" onclick="resetSim()">↺ Reset</button>
+          <select id="sim-mode" onchange="onModeChange()">
+            <option value="user">User-Based Sharding (Day 6)</option>
+            <option value="channel">Channel-Based Sharding (Day 7)</option>
+            <option value="hash">Hash-Based Sharding (Day 8)</option>
+          </select>
+          <label class="speed-label">
+            Speed: <input type="range" id="speed-range" min="1" max="10" value="5" style="width:80px"/>
+            <span id="speed-val">5</span>x
+          </label>
+        </div>
+
+        <!-- Shard Cards -->
+        <div class="shards-wrap" id="shards-wrap"></div>
+
+        <!-- Metrics Row -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+          <div class="metric-box">
+            <div class="metric-val msg-count-display" id="total-msgs">0</div>
+            <div class="metric-lbl">TOTAL MESSAGES</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" id="fail-count" style="color:var(--red)">0</div>
+            <div class="metric-lbl">FAILED WRITES</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" id="hotspot-shard" style="color:var(--yellow)">—</div>
+            <div class="metric-lbl">HOTTEST SHARD</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" id="balance-score" style="color:var(--green)">—</div>
+            <div class="metric-lbl">BALANCE SCORE</div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-wrap" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="chart-title">Shard Load Distribution</div>
+            <canvas id="dist-chart" height="180"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Message Throughput Over Time</div>
+            <canvas id="throughput-chart" height="180"></canvas>
+          </div>
+        </div>
+
+        <!-- Failure Controls -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title"><span>💥</span> Chaos Engineering (Day 9)</div>
+          <div class="failure-grid" id="chaos-grid"></div>
+        </div>
+
+        <!-- Live Feed -->
+        <div class="card">
+          <div class="card-title"><span>📡</span> Live Event Feed</div>
+          <div class="feed" id="event-feed">
+            <div class="feed-line">
+              <span class="feed-ts">--:--:--</span>
+              <span class="feed-msg"><span class="info">Simulator ready.</span> Choose a mode and press Start.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ===== ANALYSIS TAB ===== -->
+      <div class="tab-pane" id="pane-analysis">
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title"><span>🕵️</span> Post-Mortem: The Final Analysis</div>
+          <div class="insight-list">
+            <div class="insight danger">
+              <div class="insight-title">👤  Day 6 — User Sharding Failure</div>
+              The "Influencer Shard" died first. Routing by <code>user_id</code> meant 10,000 fans sending messages to one celebrity all hit the same box. The other shards? On vacation. Classic hotspot.
+            </div>
+            <div class="insight danger">
+              <div class="insight-title">#️⃣  Day 7 — Channel Sharding Failure</div>
+              The "Viral Channel Shard" (cricket final scenario) crashed the system. Even with 10 shards, if all users join one channel, you're back to 1 box doing 100% of the work.
+            </div>
+            <div class="insight warn">
+              <div class="insight-title">🎭  The Great Deception</div>
+              Channel-based sharding <em>feels</em> perfect. Fast reads, clean locality. But the 1% of viral traffic destroys the 99% of smooth operation. It's a strategy that's great on normal days and catastrophic when it matters most.
+            </div>
+            <div class="insight warn">
+              <div class="insight-title">📐  Scaling Pains: 3 → 10 Shards</div>
+              Simple <code>hash&nbsp;%&nbsp;total_shards</code> means changing N from 3 to 10 remaps almost every message. In a live system, this triggers a massive data migration that would likely crash the cluster during the migration itself.
+            </div>
+            <div class="insight success">
+              <div class="insight-title">✅  Day 8 — Hash Sharding Fixes Hotspots</div>
+              Hashing the unique <code>message_id</code> achieves perfect uniform distribution, even when 9,000 messages hit a single channel. No hotspots at all. Trade-off: reading channel history now needs a cross-shard fan-out query.
+            </div>
+            <div class="insight danger">
+              <div class="insight-title">💀  Day 9 — When a Shard Dies</div>
+              Killing Shard 1 causes ~33% of writes to fail silently. Cross-shard reads return gaps in history — "Eventual Inconsistency." Like a book with every 3rd page torn out.
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span>🏆</span> The Winning Architecture</div>
+            <div style="font-size:13px;line-height:1.8;color:var(--text-2)">
+              To build something at Discord's scale, no single sharding strategy is enough. The answer is a <strong style="color:var(--text-1)">Hybrid Approach</strong>:
+              <br/><br/>
+              <strong style="color:var(--cyan)">1. Channel-Based</strong> — for quiet, low-traffic rooms. Keeps reads fast and local.<br/>
+              <strong style="color:var(--yellow)">2. Hotspot Detection</strong> — monitor shard load in real-time.<br/>
+              <strong style="color:var(--green)">3. Dynamic Re-routing</strong> — when a channel heats up, pivot to Message-ID hashing to scatter load across the cluster.<br/><br/>
+              <em style="color:var(--text-3)">Scale isn't a problem to solve once; it's an ongoing battle.</em>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span>🗺️</span> What's Next?</div>
+            <div style="font-size:13px;line-height:1.8;color:var(--text-2)">
+              <strong style="color:var(--text-1)">Day 10 — Consistent Hashing</strong><br/>
+              Replace <code>hash&nbsp;%&nbsp;N</code> with a consistent hash ring. Adding new shards would only require moving ~1/N of data instead of all of it.
+              <br/><br/>
+              <strong style="color:var(--text-1)">Beyond Day 10</strong><br/>
+              • Replica sets for fault tolerance<br/>
+              • Write-ahead logs for crash recovery<br/>
+              • CRDT-based conflict resolution<br/>
+              • Gateway layer for routing intelligence<br/>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<script>
+// ===========================
+// DATA
+// ===========================
+const DAYS = [
+  { day:'1-2', emoji:'📝', file:'day1_day2_system_thinking.md', type:'md',
+    title:'System Thinking & Architecture',
+    desc:'Before writing a single line of code, we mapped out the architecture. Single-server, multi-server, what breaks first and why.' },
+  { day:'3', emoji:'🏗️', file:'day3_basic_system.py', type:'py',
+    title:'Basic Single-Server Chat',
+    desc:'The naive starting point: one server handles all messages, users, and channels. Fast to build, horrifying at scale.' },
+  { day:'4', emoji:'📈', file:'day4_scaling_awareness.py', type:'py',
+    title:'Scaling Awareness',
+    desc:'Stress-testing the basic system. Measure where the bottlenecks appear before they appear in production.' },
+  { day:'5', emoji:'🔀', file:'day5_intro_shards.py', type:'py',
+    title:'Introduction to Sharding',
+    desc:'Splitting the data across multiple servers for the first time. The concept is simple; the edge cases are not.' },
+  { day:'6', emoji:'👤', file:'day6_user_sharding.py', type:'py',
+    title:'User-Based Sharding',
+    desc:'Route messages by user_id. Simple and predictable — until an influencer shows up and overloads one shard.' },
+  { day:'7', emoji:'#️⃣', file:'day7_channel_sharding.py', type:'py',
+    title:'Channel-Based Sharding',
+    desc:'Route messages by channel_id. Reads are fast and local — until a channel goes viral and one box takes 100% of load.' },
+  { day:'8', emoji:'#️', file:'day8_hash_sharding.py', type:'py',
+    title:'Hash-Based Sharding (The Hotspot Killer)',
+    desc:'Hash the message_id for perfect uniform distribution. No hotspots — but channel history now requires cross-shard fan-out.' },
+  { day:'9', emoji:'💥', file:'day9_stress_failure.py', type:'py',
+    title:'Stress Testing & Failure Simulation',
+    desc:'Kill a shard mid-traffic. Watch writes fail and reads return gapped history. Chaos engineering in action.' },
+];
+
+// ===========================
+// TIMELINE
+// ===========================
+function buildTimeline() {
+  const el = document.getElementById('timeline-list');
+  el.innerHTML = DAYS.map((d,i) => `
+    <div class="tl-item" id="tlday-${d.day}">
+      <div class="tl-left">
+        <div class="tl-dot">${d.emoji}</div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-body">
+        <div class="tl-day">DAY ${d.day}</div>
+        <div class="tl-title">${d.title}</div>
+        <div class="tl-desc">${d.desc}</div>
+        <span class="tl-tag tag-${d.type}"><code style="background:none;padding:0;color:inherit">${d.file}</code></span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function scrollToDay(n) {
+  setTimeout(() => {
+    const el = document.getElementById(`tlday-${n}`);
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'center' });
+  }, 100);
+}
+
+// ===========================
+// TABS
+// ===========================
+const tabMeta = {
+  overview: { title:'Project Overview', desc:'10-day sprint — From single box to distributed reality' },
+  simulator: { title:'Live Simulator', desc:'Interactive shard routing & chaos engineering' },
+  analysis: { title:'Post-Mortem Analysis', desc:'What broke, what worked, and what to do next' }
+};
+
+function switchTab(id, navEl) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('pane-' + id).classList.add('active');
+  document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
+  if (navEl) navEl.classList.add('active');
+  const meta = tabMeta[id];
+  if (meta) {
+    document.getElementById('topbar-title').textContent = meta.title;
+    document.getElementById('topbar-desc').textContent = meta.desc;
+  }
+}
+
+// ===========================
+// SIMULATOR STATE
+// ===========================
+let simState = {
+  mode: 'user',
+  running: false,
+  timer: null,
+  shards: [],
+  numShards: 3,
+  totalMsgs: 0,
+  failCount: 0,
+  throughputHistory: [],
+  intervalMs: 200,
+};
+
+const VIRAL_USER = 999;
+const VIRAL_CHANNEL = 100;
+
+function md5hash(str) {
+  // Simple deterministic hash for demo
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function getShardForMessage(msg, mode, numShards) {
+  if (mode === 'user') return msg.userId % numShards;
+  if (mode === 'channel') return msg.channelId % numShards;
+  if (mode === 'hash') return md5hash(msg.id) % numShards;
+  return 0;
+}
+
+function buildShards() {
+  simState.shards = Array.from({ length: simState.numShards }, (_, i) => ({
+    id: i, count: 0, active: true
+  }));
+  renderShards();
+  buildChaosGrid();
+}
+
+function renderShards() {
+  const wrap = document.getElementById('shards-wrap');
+  const total = simState.shards.reduce((a, s) => a + s.count, 0) || 1;
+  wrap.innerHTML = simState.shards.map(s => {
+    const pct = Math.round((s.count / total) * 100);
+    const hot = pct > 60 && s.active;
+    const cl = !s.active ? 'down' : hot ? 'hot' : '';
+    const badge = !s.active ? 'badge-down' : hot ? 'badge-hot' : 'badge-online';
+    const badgeTxt = !s.active ? 'DOWN' : hot ? 'HOT' : 'ONLINE';
+    return `
+      <div class="shard-card ${cl}" id="shard-card-${s.id}">
+        <div class="shard-header">
+          <div class="shard-name">Shard ${s.id}</div>
+          <div class="shard-badge ${badge}">${badgeTxt}</div>
+        </div>
+        <div class="shard-count">${s.count.toLocaleString()}</div>
+        <div class="shard-label">MESSAGES STORED</div>
+        <div class="shard-bar-wrap">
+          <div class="shard-bar" style="width:${pct}%"></div>
+        </div>
+        <div class="shard-pct">${pct}% of total load</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function flashShard(shardId) {
+  const el = document.getElementById(`shard-card-${shardId}`);
+  if (!el) return;
+  el.classList.add('active-flash');
+  setTimeout(() => el.classList.remove('active-flash'), 200);
+}
+
+function buildChaosGrid() {
+  const grid = document.getElementById('chaos-grid');
+  grid.innerHTML = simState.shards.map(s => `
+    <div class="chaos-item">
+      <div>
+        <div class="chaos-label">Shard ${s.id}</div>
+        <div class="chaos-sub">Toggle to simulate shard failure</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-shard-${s.id}" checked onchange="toggleShard(${s.id}, this.checked)"/>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  `).join('');
+}
+
+function toggleShard(id, active) {
+  simState.shards[id].active = active;
+  const verb = active ? 'recovered' : 'KILLED';
+  const cls = active ? 'ok' : 'err';
+  log(`Shard ${id} ${verb}!`, cls);
+  renderShards();
+}
+
+// ===========================
+// SIMULATION LOOP
+// ===========================
+let msgCounter = 0;
+function generateMessage() {
+  msgCounter++;
+  const mode = simState.mode;
+  let userId, channelId;
+
+  if (mode === 'user') {
+    // 80% of messages from "influencer" user 999
+    userId = Math.random() < 0.8 ? VIRAL_USER : Math.floor(Math.random() * 100);
+    channelId = Math.floor(Math.random() * 10) + 1;
+  } else if (mode === 'channel') {
+    // 80% of messages to "viral" channel 100
+    userId = Math.floor(Math.random() * 1000) + 1;
+    channelId = Math.random() < 0.8 ? VIRAL_CHANNEL : Math.floor(Math.random() * 10) + 1;
+  } else {
+    userId = Math.floor(Math.random() * 1000) + 1;
+    channelId = Math.floor(Math.random() * 10) + 1;
+  }
+  return { id: `msg-${msgCounter}-${Date.now()}`, userId, channelId };
+}
+
+function step() {
+  const BATCH = 10;
+  for (let b = 0; b < BATCH; b++) {
+    const msg = generateMessage();
+    const targetShardIdx = getShardForMessage(msg, simState.mode, simState.numShards);
+    const shard = simState.shards[targetShardIdx];
+    if (!shard.active) {
+      simState.failCount++;
+      if (simState.totalMsgs % 200 === 0) {
+        log(`Write failed → Shard ${targetShardIdx} is down!`, 'err');
+      }
+    } else {
+      shard.count++;
+      simState.totalMsgs++;
+      if (simState.totalMsgs % 250 === 0) {
+        const label = simState.mode === 'user' ? `User:${msg.userId}` :
+                      simState.mode === 'channel' ? `Ch:${msg.channelId}` : `Hash→S${targetShardIdx}`;
+        log(`→ Shard ${targetShardIdx} | ${label}`, 'hi');
+        flashShard(targetShardIdx);
+      }
+    }
+  }
+
+  // Update throughput history (per second)
+  if (simState.totalMsgs > 0) {
+    const hist = simState.throughputHistory;
+    hist.push(simState.totalMsgs);
+    if (hist.length > 20) hist.shift();
+  }
+
+  renderShards();
+  updateMetrics();
+  drawCharts();
+}
+
+function updateMetrics() {
+  document.getElementById('total-msgs').textContent = simState.totalMsgs.toLocaleString();
+  document.getElementById('fail-count').textContent = simState.failCount.toLocaleString();
+
+  const total = simState.shards.reduce((a, s) => a + s.count, 0);
+  if (total === 0) return;
+  let maxLoad = 0; let hotShard = 0;
+  simState.shards.forEach((s, i) => {
+    const pct = s.count / total;
+    if (pct > maxLoad) { maxLoad = pct; hotShard = i; }
+  });
+  document.getElementById('hotspot-shard').textContent = `Shard ${hotShard} (${Math.round(maxLoad*100)}%)`;
+
+  // Balance score: 100 = perfect, lower = more imbalanced
+  const ideal = 1 / simState.numShards;
+  const variance = simState.shards.reduce((a, s) => {
+    const diff = (s.count / total) - ideal;
+    return a + diff * diff;
+  }, 0);
+  const score = Math.max(0, Math.round(100 - (variance * simState.numShards * 200)));
+  const el = document.getElementById('balance-score');
+  el.textContent = `${score}/100`;
+  el.style.color = score > 75 ? 'var(--green)' : score > 40 ? 'var(--yellow)' : 'var(--red)';
+}
+
+// ===========================
+// CHARTS (vanilla canvas)
+// ===========================
+function drawCharts() {
+  drawDistChart();
+  drawThroughputChart();
+}
+
+function drawDistChart() {
+  const canvas = document.getElementById('dist-chart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 36;
+  const H = 180;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const total = simState.shards.reduce((a, s) => a + s.count, 0) || 1;
+  const n = simState.shards.length;
+  const barW = Math.min(60, (W - 40) / n - 10);
+  const gutter = (W - n * barW) / (n + 1);
+  const colors = ['#5865f2','#00d2ff','#3ba55d','#faa81a','#ed4245','#b14fcf'];
+
+  simState.shards.forEach((s, i) => {
+    const pct = s.count / total;
+    const barH = pct * (H - 40);
+    const x = gutter + i * (barW + gutter);
+    const y = H - 20 - barH;
+    const color = !s.active ? '#5a6380' : pct > 0.6 ? '#ed4245' : colors[i % colors.length];
+
+    // Glow
+    ctx.shadowBlur = 12; ctx.shadowColor = color;
+    const grad = ctx.createLinearGradient(0, y, 0, H - 20);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, color + '44');
+    ctx.fillStyle = grad;
+    const r = 4;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + barW - r, y);
+    ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
+    ctx.lineTo(x + barW, H - 20); ctx.lineTo(x, H - 20);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Label
+    ctx.fillStyle = '#96a0b5'; ctx.font = '11px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText(`S${i}`, x + barW / 2, H - 4);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px JetBrains Mono';
+    ctx.fillText(`${Math.round(pct * 100)}%`, x + barW / 2, Math.max(y - 4, 14));
+  });
+
+  // Ideal line
+  const idealY = H - 20 - (1 / n) * (H - 40);
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = '#5a638066';
+  ctx.beginPath(); ctx.moveTo(0, idealY); ctx.lineTo(W, idealY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#5a6380'; ctx.font = '10px Inter'; ctx.textAlign = 'right';
+  ctx.fillText('ideal', W - 4, idealY - 3);
+}
+
+function drawThroughputChart() {
+  const canvas = document.getElementById('throughput-chart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 36;
+  const H = 180;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const hist = simState.throughputHistory;
+  if (hist.length < 2) return;
+
+  const max = Math.max(...hist) || 1;
+  const pts = hist.map((v, i) => ({
+    x: (i / (hist.length - 1)) * (W - 20) + 10,
+    y: H - 20 - ((v / max) * (H - 40))
+  }));
+
+  // Fill
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(88,101,242,0.3)');
+  grad.addColorStop(1, 'rgba(88,101,242,0.0)');
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, H - 20);
+  pts.forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(pts[pts.length-1].x, H - 20);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  // Line
+  ctx.shadowBlur = 8; ctx.shadowColor = '#5865f2';
+  ctx.strokeStyle = '#7289ff'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Dot at end
+  const last = pts[pts.length - 1];
+  ctx.beginPath(); ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#7289ff'; ctx.fill();
+
+  ctx.fillStyle = '#96a0b5'; ctx.font = '11px Inter';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${(hist[hist.length-1] || 0).toLocaleString()} msgs`, W - 8, 16);
+}
+
+// ===========================
+// CONTROLS
+// ===========================
+function startSim() {
+  if (simState.running) {
+    clearInterval(simState.timer);
+    simState.running = false;
+    document.getElementById('btn-start').textContent = '▶ Start Simulation';
+    log('Simulation paused.', 'warn');
+    return;
+  }
+  simState.running = true;
+  document.getElementById('btn-start').textContent = '⏸ Pause';
+  const speed = parseInt(document.getElementById('speed-range').value);
+  const ms = Math.max(50, 500 / speed);
+  log(`Simulation started → Mode: ${simState.mode.toUpperCase()}, ${simState.numShards} shards`, 'ok');
+  simState.timer = setInterval(step, ms);
+}
+
+function resetSim() {
+  clearInterval(simState.timer);
+  simState.running = false;
+  simState.totalMsgs = 0;
+  simState.failCount = 0;
+  simState.throughputHistory = [];
+  msgCounter = 0;
+  document.getElementById('btn-start').textContent = '▶ Start Simulation';
+  document.getElementById('total-msgs').textContent = '0';
+  document.getElementById('fail-count').textContent = '0';
+  document.getElementById('hotspot-shard').textContent = '—';
+  document.getElementById('balance-score').textContent = '—';
+  buildShards();
+  clearFeed();
+  drawCharts();
+  log('Reset. Ready.', 'info');
+}
+
+function onModeChange() {
+  if (simState.running) resetSim();
+  simState.mode = document.getElementById('sim-mode').value;
+  syncPills();
+  const msgs = {
+    user: 'User-Based mode: 80% of traffic → User 999 (Influencer). Watch Shard assignment concentrate.',
+    channel: 'Channel-Based mode: 80% of traffic → Channel 100 (Viral). One shard will overload quickly.',
+    hash: 'Hash-Based mode: Message IDs are hashed for perfect distribution. Balance score stays high.'
+  };
+  log(msgs[simState.mode], 'info');
+}
+
+function setShardMode(mode, el) {
+  document.querySelectorAll('.topbar-pills .pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  simState.mode = mode;
+  const sel = document.getElementById('sim-mode');
+  if (sel) sel.value = mode;
+  if (simState.running) resetSim();
+  onModeChange();
+
+  // Switch to simulator tab
+  switchTab('simulator', document.getElementById('nav-simulator'));
+}
+
+function syncPills() {
+  ['user','channel','hash'].forEach(m => {
+    const el = document.getElementById('pill-' + m);
+    if (el) el.classList.toggle('active', m === simState.mode);
+  });
+}
+
+document.getElementById('speed-range').addEventListener('input', function() {
+  document.getElementById('speed-val').textContent = this.value;
+  if (simState.running) {
+    clearInterval(simState.timer);
+    const ms = Math.max(50, 500 / parseInt(this.value));
+    simState.timer = setInterval(step, ms);
+  }
+});
+
+// ===========================
+// EVENT FEED
+// ===========================
+function log(msg, type = '') {
+  const feed = document.getElementById('event-feed');
+  const now = new Date();
+  const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+  const line = document.createElement('div');
+  line.className = 'feed-line';
+  line.innerHTML = `<span class="feed-ts">${ts}</span><span class="feed-msg"><span class="${type}">${msg}</span></span>`;
+  feed.appendChild(line);
+  feed.scrollTop = feed.scrollHeight;
+  // Max 80 lines
+  while (feed.children.length > 80) feed.removeChild(feed.firstChild);
+}
+
+function clearFeed() {
+  const feed = document.getElementById('event-feed');
+  feed.innerHTML = '<div class="feed-line"><span class="feed-ts">--:--:--</span><span class="feed-msg"><span class="info">Reset. Simulator ready.</span></span></div>';
+}
+
+// ===========================
+// INIT
+// ===========================
+buildTimeline();
+buildShards();
+drawCharts();
+log('Welcome to ShardSim. Choose a sharding strategy and click Start!', 'info');
+log('Tip: Switch modes in the top bar or the dropdown. Try Hash mode for the best balance score.', 'info');
+</script>
+</body>
+</html>
