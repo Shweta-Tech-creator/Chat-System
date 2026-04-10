@@ -5,7 +5,7 @@
 ## 🎨 Interactive Architecture Dashboard
 I built a completely interactive, custom UI to visualize this entire 10-day journey.
 
-👉 **[View the Live Dashboard (index.html)](index.html)** 👈
+👉 **[View the Live Dashboard ](https://chat-system-zeta.vercel.app/)** 👈
 
 **What's in the Dashboard?**
 - **Live Simulator:** Watch how messages route dynamically under our `User`, `Channel`, and `Hash` strategies.
