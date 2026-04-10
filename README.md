@@ -74,12 +74,3 @@ Simulated in `day9_stress_failure.py`:
 - **Writes:** 1/3rd of our users suddenly can't send messages. The system feels broken.
 - **Reads:** This is the weirdest part. When you query for "Recent Messages," you get gaps. It's like reading a book with every 3rd page ripped out. This "Eventual Inconsistency" is the price we pay for speed, but man, it makes for a frustrated user.
 
----
-
-## 💡 The "Aha!" Moment
-To build something as big as Discord, you can't just pick one way to shard. You need a "Hybrid" approach:
-1. Use **Channel-Based Sharding** for the quiet rooms.
-2. Watch for **Hotspots** (spikes).
-3. If a room gets too loud, dynamically pivot to **Message-ID Hashing** to spread that one channel across the whole cluster.
-
-*Scale isn't a problem to solve once; it's an ongoing battle.*
