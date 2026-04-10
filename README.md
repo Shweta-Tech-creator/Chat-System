@@ -55,7 +55,7 @@ With Hash-Based Sharding as our foundation, Day 9 stress-tests the system under 
 
 ---
 
-## 🕵️‍♂️ Post-Mortem: The Final Analysis (Day 10)
+## The Final Analysis (Day 10)
 
 ### 1. The First to Fall: Who hit the wall?
 In my **User-Based Sharding** test (`day6_user_sharding.py`), the "Influencer Shard" died first. Imagine 10,000 fans sending messages to one user. Because I routed by `user_id`, one server was doing all the heavy lifting while the other two were basically on vacation. Classic hotspot.
